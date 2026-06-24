@@ -20,9 +20,7 @@ async function refreshAccessToken() {
       { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
     );
     currentAccessToken = res.data.access_token;
-    if (res.data.refresh_token) {
-      currentRefreshToken = res.data.refresh_token;
-    }
+    if (res.data.refresh_token) currentRefreshToken = res.data.refresh_token;
     console.log('✅ 토큰 갱신 성공');
   } catch (e) {
     console.error('❌ 토큰 갱신 실패:', e.message);
@@ -31,7 +29,7 @@ async function refreshAccessToken() {
 
 async function sendKakaoMessage(text) {
   try {
-    const res = await axios.post(
+    await axios.post(
       'https://kapi.kakao.com/v2/api/talk/memo/default/send',
       new URLSearchParams({
         template_object: JSON.stringify({
@@ -48,7 +46,6 @@ async function sendKakaoMessage(text) {
       }
     );
     console.log('✅ 카카오 메시지 전송 성공');
-    return res.data;
   } catch (e) {
     if (e.response?.data?.code === -401) {
       console.log('🔄 토큰 만료 - 갱신 시도');
@@ -60,9 +57,8 @@ async function sendKakaoMessage(text) {
   }
 }
 
-// Android에서 호출할 Webhook
 app.post('/sms-webhook', async (req, res) => {
-  const { secret, sender, message } = req.body;
+  const { secret, sender, alias, message } = req.body;
 
   if (secret !== SECRET_KEY) {
     return res.status(403).json({ error: '인증 실패' });
@@ -71,7 +67,15 @@ app.post('/sms-webhook', async (req, res) => {
     return res.status(400).json({ error: '파라미터 누락' });
   }
 
-  const text = `📱 SMS 수신 알림\n발신번호: ${sender}\n내용: ${message}\n시간: ${new Date().toLocaleString('ko-KR')}`;
+  // 별칭이 있으면 별칭 표시, 없으면 번호만 표시
+  const displayName = alias && alias !== sender ? `${alias} (${sender})` : sender;
+
+  const text = [
+    '📱 SMS 수신 알림',
+    `발신: ${displayName}`,
+    `내용: ${message}`,
+    `시간: ${new Date().toLocaleString('ko-KR')}`,
+  ].join('\n');
 
   try {
     await sendKakaoMessage(text);
@@ -81,9 +85,6 @@ app.post('/sms-webhook', async (req, res) => {
   }
 });
 
-// 헬스체크
 app.get('/', (req, res) => res.send('SMS Bot Server Running ✅'));
 
-app.listen(process.env.PORT || 3000, () => {
-  console.log('🚀 서버 시작됨');
-});
+app.listen(process.env.PORT || 3000, () => console.log('🚀 서버 시작됨'));
